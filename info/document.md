@@ -94,10 +94,12 @@ books-list-app/
 │
 ├── public/                                     # Archivos estáticos
 │
+├── info/                                       # Documentación del proyecto
+│   └── document.md                             # Software Design Document (este archivo)
+│
 ├── .github/                                    # GitHub configurations
-│   └── instructions/                           # Documentación del proyecto
-│       ├── general.instructions.md             # Instrucciones generales de código
-│       └── document.md                         # Software Design Document
+│   └── instructions/                           # Instrucciones de desarrollo
+│       └── general.instructions.md             # Instrucciones generales de código
 │
 ├── .env.local                                  # Variables de entorno
 ├── postcss.config.mjs                          # Config PostCSS
@@ -495,6 +497,134 @@ GET https://gutendex.com/books/?page=1
 - Mostrar mensaje de error amigable al usuario
 - Proporcionar botón para reintentar la carga (opcional)
 
+### 4.5 Sistema de Skeleton Loading
+
+La aplicación implementa un sistema completo de skeleton screens para mejorar la percepción de velocidad durante la carga de datos.
+
+#### Skeleton (Componente Base)
+
+**Ubicación:** `lib/shared/components/ui/Skeleton.tsx`
+
+**Props:**
+
+- Extiende `React.HTMLAttributes<HTMLDivElement>`
+- Acepta className y otras props HTML estándar
+
+**Implementación:**
+
+```tsx
+function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn("animate-pulse rounded-md bg-gray-300", className)}
+      {...props}
+    />
+  );
+}
+```
+
+**Características:**
+
+- Animación de pulso con `animate-pulse`
+- Color neutral visible: `bg-gray-300`
+- Bordes redondeados: `rounded-md`
+- Combina clases con función `cn()` para flexibilidad
+- Componente base reutilizable para construir skeletons complejos
+
+#### BooksListSkeleton
+
+**Ubicación:** `lib/books/components/BooksListSkeleton.tsx`
+
+**Props:** Ninguno
+
+**Responsabilidades:**
+
+- Simular el layout de la grilla de libros durante carga
+- Mostrar 10 skeletons (coincide con BOOKS_LIMIT)
+- Mantener estructura visual idéntica a BookCard
+
+**Estructura:**
+
+```tsx
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+  {Array.from({ length: 10 }).map((_, i) => (
+    <Card key={i}>
+      <Skeleton className="h-6 w-3/4 mb-3" />  {/* Título */}
+      <Skeleton className="h-4 w-1/2 mb-2" />  {/* Autor */}
+      <Skeleton className="h-4 w-1/3" />       {/* Descargas */}
+    </Card>
+  ))}
+</div>
+```
+
+#### BookDetailSkeleton
+
+**Ubicación:** `lib/books/components/BookDetailSkeleton.tsx`
+
+**Props:** Ninguno
+
+**Responsabilidades:**
+
+- Simular el layout de la página de detalle durante carga
+- Mostrar skeleton para portada, título, información y temas
+- Mantener estructura visual idéntica a la página de detalle
+
+**Estructura:**
+
+```tsx
+<div className="grid md:grid-cols-3 gap-8">
+  {/* Portada */}
+  <Skeleton className="h-96 w-full" />
+  
+  {/* Información */}
+  <div className="md:col-span-2">
+    <Skeleton className="h-8 w-3/4 mb-4" />   {/* Título */}
+    <Skeleton className="h-6 w-1/2 mb-6" />   {/* Autor */}
+    {/* Más skeletons para información adicional */}
+  </div>
+</div>
+```
+
+#### Uso de Loading States
+
+**Convención loading.tsx de Next.js:**
+
+La aplicación usa la convención `loading.tsx` de Next.js 15 para mostrar estados de carga automáticamente durante navegación:
+
+1. **app/loading.tsx** - Loading principal:
+   ```tsx
+   export default function Loading() {
+     return (
+       <main>
+         <div>
+           <h1>Biblioteca de Libros</h1>  {/* Título real */}
+           <p>Explora nuestra colección</p> {/* Descripción real */}
+         </div>
+         <BooksListSkeleton />  {/* Skeleton para libros */}
+       </main>
+     );
+   }
+   ```
+
+2. **app/books/[id]/loading.tsx** - Loading de detalle:
+   ```tsx
+   export default function Loading() {
+     return (
+       <main>
+         <BookDetailSkeleton />
+       </main>
+     );
+   }
+   ```
+
+**Ventajas del enfoque:**
+
+- Automático: Next.js muestra loading.tsx mientras carga Server Components
+- Streaming SSR: Permite renderizado progresivo
+- Mejor UX: Usuario ve estructura antes que contenido vacío
+- Sin useEffect: No requiere lógica de loading manual
+- SEO friendly: Contenido estático visible mientras carga dinámico
+
 ---
 
 ## 5. Manejo de Errores
@@ -503,49 +633,131 @@ GET https://gutendex.com/books/?page=1
 
 #### **Service Layer (BooksService)**
 
+**Ubicación:** `lib/books/services/books-service.ts`
+
 **Responsabilidad:** Detectar y propagar errores de red y HTTP
+
+**Implementación:**
+
+```typescript
+async getBooks(page: number): Promise<BooksApiResponse> {
+  try {
+    const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.BOOKS}/?page=${page}`;
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data: BooksApiResponse = await response.json();
+    return data;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Error al obtener libros: ${error.message}`);
+    }
+    throw new Error('Error desconocido al obtener libros');
+  }
+}
+```
 
 **Estrategia:**
 
-- Validar respuestas HTTP (códigos de estado)
-- Capturar errores de red
-- Transformar errores en mensajes descriptivos
+- Validar respuestas HTTP con `!response.ok` (detecta códigos 4xx y 5xx)
+- Capturar errores de red, timeout, y parse errors en bloque catch
+- Transformar errores en mensajes descriptivos con prefijo "Error al obtener libros:"
 - Propagar errores hacia la capa superior
 
-**Tipos de validación:**
+**Tipos de errores detectados:**
 
-- Response status (200-299 = éxito)
-- Timeout de conexión
-- Formato de respuesta JSON válido
+- HTTP 4xx: Errores del cliente (404 Not Found, etc.)
+- HTTP 5xx: Errores del servidor
+- Network errors: Sin conexión a internet
+- Parse errors: JSON inválido en response.json()
+- Timeout: Respuesta demorada
 
 #### **Hook Layer (useBooks)**
 
+**Ubicación:** `lib/books/hooks/useBooks.ts`
+
 **Responsabilidad:** Capturar errores del servicio y actualizar estado
+
+**Implementación:**
+
+```typescript
+const fetchBooks = useCallback(async () => {
+  setStatus('loading');
+  setError(null);
+
+  try {
+    const response = await booksService.getBooks(page);
+    const limitedBooks = response.results.slice(0, API_CONFIG.BOOKS_LIMIT);
+    setBooks(limitedBooks);
+    setStatus('success');
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error('Error desconocido');
+    setError(error);
+    setStatus('error');
+  }
+}, [page]);
+```
 
 **Estrategia:**
 
 - Envolver llamadas a servicios en try-catch
+- Resetear error a null antes de cada intento
 - Convertir errores desconocidos en objetos Error
-- Actualizar estado a 'error'
-- Almacenar mensaje de error para UI
+- Limitar resultados a 10 libros (BOOKS_LIMIT)
+- Actualizar estado a 'error' y almacenar error
+- Proveer función `refetch` para reintentos
 
 **Flujo:**
 
-1. Cambiar estado a 'loading'
+1. Cambiar estado a 'loading' y limpiar errores previos
 2. Intentar fetch mediante servicio
-3. Si éxito: actualizar books y cambiar estado a 'success'
-4. Si fallo: capturar error y cambiar estado a 'error'
+3. Si éxito: limitar a 10 libros, actualizar books y cambiar estado a 'success'
+4. Si fallo: capturar error, guardar en estado, cambiar estado a 'error'
 
 #### **Component Layer (BookError)**
 
+**Ubicación:** `lib/books/components/BookError.tsx`
+
 **Responsabilidad:** Presentar errores de forma amigable al usuario
+
+**Implementación:**
+
+```tsx
+export function BookError({ error, onRetry }: BookErrorProps) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16">
+      <div className="text-center max-w-md px-4">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-error/10 flex items-center justify-center">
+          <svg className="w-8 h-8 text-error">{/* Icono de warning */}</svg>
+        </div>
+        <h2 className="text-xl font-bold text-foreground mb-2">
+          {UI_CONFIG.ERROR_TEXT}
+        </h2>
+        <p className="text-muted-foreground mb-6 text-sm">
+          {error.message}
+        </p>
+        {onRetry && (
+          <Button onClick={onRetry} variant="default" size="sm">
+            {UI_CONFIG.RETRY_TEXT}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+```
 
 **Estrategia:**
 
-- Mostrar mensaje de error legible
-- Ofrecer opción de reintentar (botón)
-- Evitar mostrar detalles técnicos al usuario
-- Mantener la UI funcional incluso en error
+- Mostrar icono de advertencia en círculo rojo
+- Título: "Error al cargar los libros" (desde UI_CONFIG.ERROR_TEXT)
+- Mostrar mensaje de error real desde `error.message`
+- Botón "Reintentar" que ejecuta callback `onRetry`
+- Diseño centrado y responsive
+- Evitar exposición de detalles técnicos sensibles
 
 ### 5.2 Tipos de Errores Contemplados
 
