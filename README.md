@@ -98,6 +98,11 @@ cd books-list-app
 npm install
 ```
 
+### Repositorio
+
+El código fuente de este proyecto está disponible en:
+[https://github.com/Salchichon057/books-list-application](https://github.com/Salchichon057/books-list-application)
+
 3. Ejecutar en modo desarrollo:
 ```bash
 npm run dev
@@ -238,7 +243,7 @@ La aplicación implementa tres estados principales:
 ## Documentación Adicional
 
 Para más detalles técnicos, consultar:
-- `.info/document.md` - Software Design Document completo
+- [`info/document.md`](./info/document.md) - Software Design Document completo
 
 ## Criterios de Evaluación Cumplidos
 
