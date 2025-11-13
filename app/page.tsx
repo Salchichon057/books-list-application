@@ -19,8 +19,12 @@ export default async function Home() {
       <div className="mx-auto max-w-7xl space-y-4">
         <div className="flex items-center justify-between space-y-2">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">Biblioteca de Libros</h2>
+            <h2 className="text-3xl font-bold tracking-tight">
+              <i className="fa-solid fa-book-open-reader text-primary mr-3"></i>
+              Biblioteca de Libros
+            </h2>
             <p className="text-muted-foreground">
+              <i className="fa-solid fa-compass mr-2"></i>
               Descubre los primeros 10 libros de Project Gutenberg
             </p>
           </div>
